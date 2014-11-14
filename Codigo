@@ -1,0 +1,148 @@
+
+Dim deco, src As Boolean
+Dim rutaSrc, rutaDeco As String
+
+
+Function elegirArchivo(celda As String) As Boolean
+    
+    ruta = Application.GetOpenFilename(title:="Seleccione el archivo")
+    
+    If ruta = "Falso" Then 'Ruta "cancel" ó [x], solo funciona en office en español
+        range(celda).Value = ""
+        elegirArchivo = False ' return false
+    Else 'Ruta ok
+        range(celda).Value = ruta
+        elegirArchivo = True ' return true
+    End If
+    
+End Function
+
+Sub cargarSource()
+    
+    If elegirArchivo("B2") Then
+        src = True
+        rutaSrc = range("B2").Value
+    Else
+        src = False
+    End If
+    
+End Sub
+
+Sub cargarDecorator()
+    
+    If elegirArchivo("B3") Then
+        deco = True
+        rutaDeco = range("B3").Value
+    Else
+        deco = False
+    End If
+    
+End Sub
+
+Sub aplicarDecoExcel()
+    
+    If (src = True And deco = True) Then
+        
+        If aplicarDeco(rutaSrc, rutaDeco) Then
+            MsgBox "Archivos Copiados."
+        End If
+        
+    Else
+        MsgBox "Se deben agregar las dos archivos"
+    End If
+    
+End Sub
+
+Function aplicarDeco(ByVal RutaSource As String, ByVal RutaDecorator As String) As Boolean
+    
+    ' Retorna True si todo se realizo bien
+    ' False si tuvo algun problema
+    
+    ' Definicion de variables --
+    ' Documentos DOM
+    Dim decorator As MSXML2.DOMDocument
+    Dim result As MSXML2.DOMDocument
+    ' Para recorer decorator
+    Dim DecoRaiz  As MSXML2.IXMLDOMNode  ' Cora:Decortator
+    Dim AccionDeco As MSXML2.IXMLDOMNode       ' Append, Insert, Replace
+    Dim ConteDeco As MSXML2.IXMLDOMNode    ' Es lo que queremos agregar, insertar o reemplazar
+    ' Para los nodos retornados (de DOM)
+    Dim DecoResult As MSXML2.IXMLDOMNode
+    Dim DecoResult2 As MSXML2.IXMLDOMNode
+    ' Ruta de cada decorator
+    Dim XPath As String
+    
+    ' Inicio
+    aplicarDeco = True
+    
+    ' Load docs
+    Set result = New MSXML2.DOMDocument
+    result.Load RutaSource
+    Set decorator = New MSXML2.DOMDocument
+    decorator.Load RutaDecorator
+    
+    
+    For Each DecoRaiz In decorator.DocumentElement.ChildNodes ' Recorre cada decorator
+            
+            XPath = DecoRaiz.Attributes.getNamedItem("ref").Text
+                
+            For Each AccionDeco In DecoRaiz.ChildNodes
+                
+                If AccionDeco.BaseName = "append" Then
+                    ' Para cada nodo de append
+                    For Each ConteDeco In AccionDeco.ChildNodes
+                        Set DecoResult2 = result.SelectSingleNode(XPath).appendChild(ConteDeco)
+                        Set DecoResult2 = Nothing
+                    Next
+                    
+                ElseIf AccionDeco.BaseName = "insert" Then
+                    ' Todo lo que se ve a insertar se agrega en un framento, y luego este es insertado
+                    ' De esta manera los nodos hijos de insert no quedaran en desorden
+                    Set DecoFrag1 = result.createDocumentFragment
+                    Set DecoFrag2 = result.createDocumentFragment
+                    For Each ConteDeco In AccionDeco.ChildNodes
+                        Set DecoFrag2 = DecoFrag1.appendChild(ConteDeco) ' aqui se agregan lo nodos (ConteDeco) al fragmento (DecoFrag1)
+                        Set DecoFrag2 = Nothing
+                    Next
+                    
+                        If result.SelectSingleNode(XPath).HasChildNodes Then
+                            ' Se inserta el fragmento
+                            Set DecoResult2 = result.SelectSingleNode(XPath).ParentNode.InsertBefore(DecoFrag1, result.SelectSingleNode(XPath))
+                        Else
+                            Set DecoResult2 = result.SelectSingleNode(XPath).ParentNode.appendChild(DecoFrag1)
+                        End If
+                    
+                    Set DecoResult2 = Nothing
+                    Set DecoFrag1 = Nothing
+                    
+                ElseIf AccionDeco.BaseName = "replace" Then
+                    '
+                    For Each ConteDeco In AccionDeco.ChildNodes
+                        Set DecoResult2 = result.SelectSingleNode(XPath).ParentNode.replaceChild(ConteDeco, result.SelectSingleNode(XPath))
+                        Set DecoResult2 = Nothing
+                    Next
+                    
+
+                End If
+                
+                
+            Next
+            
+        
+    Next
+    ' Se relizaron todas las modificaciones
+    
+    ' guardar doc
+    Dim spl() As String
+    Dim ruta As String
+    
+    spl = Split(RutaSource, ".")
+    ruta = spl(0) & "_cora." & spl(1)
+    result.Save (ruta)
+
+    
+    Set decorator = Nothing
+    Set result = Nothing
+    
+    
+End Function
